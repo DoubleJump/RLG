@@ -1,3 +1,5 @@
+'use strict';
+
 //DEBUG
 function ASSERT(expr, message)
 {
@@ -96,6 +98,7 @@ var gb =
 		gb.stack.clear_all();
 		
 		var dt = gb.time.dt;
+
 		gb.update(dt);
 		gb.input.update();
 		gb.render();
@@ -1502,30 +1505,108 @@ gb.quat =
 		r[3] = a[3] * beta + b[3] * alpha;
 	}, 
 }
+gb.projections = 
+{
+    cartesian_to_polar: function(r, c)
+    {
+        var radius = gb.vec3.length(c);
+        var theta = gb.math.atan2(c[1], c[0]);
+        var phi = gb.math.acos(2/radius);
+        gb.vec3.set(r, theta, phi, radius);
+    },
+    polar_to_cartesian: function(r, theta, phi, radius)
+    {
+        var x = radius * gb.math.cos(theta) * gb.math.sin(phi);
+        var y = radius * gb.math.cos(phi);
+        var z = radius * gb.math.sin(theta) * gb.math.sin(phi);
+        gb.vec3.set(r, x,y,z);
+    },
+
+    world_to_screen: function(r, projection, world, view)
+    {
+    	var wp = gb.vec3.tmp(); 
+        gb.mat4.mul_projection(wp, projection, world);
+        r[0] = ((wp[0] + 1.0) / 2.0) * view.width;
+        r[1] = ((1.0 - wp[1]) / 2.0) * view.height;
+    },
+
+    screen_to_view: function(r, point, view)
+    {
+        r[0] = point[0] / view.width;
+        r[1] = 1.0 - (point[1] / view.height);
+        r[2] = point[2];
+    },
+
+    screen_to_world: function(r, projection, point, view)
+    {
+        var t = gb.vec3.tmp();
+        t[0] = 2.0 * point[0] / view.width - 1.0;
+        t[1] = -2.0 * point[1] / view.height + 1.0;
+        t[2] = point[2];
+            
+        var inv = gb.mat4.tmp();
+        gb.mat4.inverse(inv, projection);
+        gb.mat4.mul_projection(r, inv, t);
+    },
+
+    world_camera_rect:function(r, projection, view)
+    {
+        var v3 = gb.vec3;
+        var index = v3.stack.index;
+        var bl = v3.tmp(0,0);
+        var tr = v3.tmp(view[0], view[1]);
+        var blw = v3.tmp();
+        var trw = v3.tmp();
+        screen_to_world(blw, projection, bl, view);
+        screen_to_world(trw, projection, tr, view);
+        r.width = trw[0] - blw[0];
+        r.height = trw[1] - blw[1];
+    },
+}
 gb.time = 
 {
 	start: 0,
     elapsed: 0,
-    now: 0,
+    time: 0,
+    frame: 0,
     last: 0,
+    next: 0,
     dt: 0,
     paused: false,
+    step: 1 / 60,
+    sub_step: 1 / 16384,
 
     init: function(t)
     {
+        var now = performance.now() / 1000;
+        //else use t
+
         var _t = gb.time;
-    	_t.elapsed = 0;
-        _t.start = t;
-        _t.now = t;
-        _t.last = t;
+        _t.elapsed = 0;
+        _t.frame = 0;
+        _t.start = now;
+        _t.time = now;
+        _t.last = now;
+        _t.next = now;
         _t.paused = false;
     },
     update: function(t)
     {
         var _t = gb.time;
-    	_t.now = t;
-    	_t.dt = ((t - _t.last) / 1000);
-    	_t.last = t;
+
+        var now = performance.now() / 1000;
+        while(_t.time < now)
+        {
+            while(_t.time < _t.next)
+            {
+                _t.time += _t.sub_step;
+            }
+            _t.frame++;
+            _t.next += _t.step;
+        }
+
+        _t.dt = _t.time - _t.last;
+        _t.last = _t.time;
         _t.elapsed += _t.dt;
     },
 }
@@ -1950,7 +2031,7 @@ gb.Material = function()
 {
     this.name;
     this.shader;
-    this.mvp;
+    //this.mvp;
 }
 gb.material = 
 {
@@ -2755,7 +2836,7 @@ gb.camera =
 		e.entity_type = gb.EntityType.CAMERA;
 		e.update = gb.camera.update;
 	    var c = new gb.Camera();
-	    c.projection_type = projection || gb.Projection.PERSPECTIVE;
+	    c.projection_type = projection;
 	    c.near = near || 0.1;
 	    c.far = far || 100;
 	    c.fov = fov || 60;
@@ -2863,12 +2944,20 @@ gb.gl_draw =
 		gl.update_mesh(_t.mesh);
 		gl.use_shader(_t.material.shader);
 		//gb.material.set_camera_uniforms(_t.material, camera);
-		gb.material.set_matrix_uniforms(_t.material, _t.matrix, camera);
+
+		if(camera !== null)
+		{
+			//gb.material.set_matrix_uniforms(_t.material, _t.matrix, camera);
+			gb.mat4.mul(_t.material.mvp, _t.matrix, camera.view_projection);
+			gl.ctx.depthRange(camera.near, camera.far);
+		}
+		else
+		{
+			_t.material.mvp = _t.matrix;
+		}
 		gl.link_attributes(_t.material.shader, _t.mesh);
 		gl.set_uniforms(_t.material);
 		gl.set_state(gl.ctx.DEPTH_TEST, false);
-		//gl.set_render_target(target, false);
-		gl.ctx.depthRange(camera.near, camera.far);
 		gl.ctx.lineWidth = _t.thickness;
 		gl.draw_mesh(_t.mesh);
 
@@ -3163,6 +3252,175 @@ gb.canvas =
 		ctx.stroke();
 	},
 }
+gb.Debug_View = function()
+{
+	this.visible = true;
+	this.root;
+	this.container;
+	this.observers = [];
+	this.controllers = [];
+}
+gb.Debug_Observer = function()
+{
+	this.element;
+	this.in_use;
+	this.is_watching;
+	this.label;
+	this.target;
+	this.property;
+	this.index;
+}
+gb.Debug_Controller = function()
+{
+	this.name;
+	this.label;
+	this.slider;
+	this.value;
+}
+
+gb.debug_view =
+{
+	new: function(root, x, y, opacity)
+	{
+		var view = new gb.Debug_View();
+		view.root = root;
+
+		var container = document.createElement('div');
+		container.classList.add('gb-debug-view');
+		container.style.left = x || 10;
+		container.style.top = y || 10;
+		container.style.opacity = opacity || 0.95;
+		view.container = container;
+
+		var MAX_OBSERVERS = 10;
+		for(var i = 0; i < MAX_OBSERVERS; ++i)
+		{
+			var element = document.createElement('div');
+			element.classList.add('gb-debug-observer');
+			element.classList.add('gb-debug-hidden');
+			container.appendChild(element);
+
+			var observer = new gb.Debug_Observer();
+			observer.element = element;
+			observer.in_use = false;
+			observer.is_watching = false;
+			view.observers.push(observer);
+		}
+		
+		root.appendChild(container);
+		return view;
+	},
+	set_visible: function(view)
+	{
+		if(view.visible === false) 
+		{
+			LOG(view.visible);
+			view.container.classList.add('gb-debug-hidden');
+		}
+		else view.container.classList.remove('gb-debug-hidden');
+	},
+	update: function(view)
+	{
+		var n = view.observers.length;
+		for(var i = 0; i < n; ++i)
+		{
+			var observer = view.observers[i];
+			if(observer.is_watching === true)
+			{
+				var val;
+				var target = observer.target;
+				var prop = observer.property;
+				var index = observer.index;
+				if(index === -1) 
+				{
+					val = target[prop];
+				}
+				else val = target[prop][index];
+				observer.element.innerText = observer.label + ": " + val;
+				continue;
+			}
+			if(observer.in_use === true)
+			{
+				observer.in_use = false;
+				observer.element.classList.add('gb-debug-hidden');
+			}
+		}
+		n = view.controllers.length;
+		for(var i = 0; i < n; ++i)
+		{
+			var controller = view.controllers[i];
+			controller.value = controller.slider.value;
+			controller.label.innerText = controller.name + ': ' + controller.value;
+		}
+	},
+	label: function(view, label, val)
+	{
+		var n = view.observers.length;
+		for(var i = 0; i < n; ++i)
+		{
+			var observer = view.observers[i];
+			if(observer.in_use === false)
+			{
+				observer.element.innerText = label + ": " + val;
+				observer.element.classList.remove('gb-debug-hidden');
+				observer.in_use = true;
+				return;
+			}
+		}
+		LOG('No free observers available');
+	},
+	watch: function(view, label, target, property, index)
+	{
+		var n = view.observers.length;
+		for(var i = 0; i < n; ++i)
+		{
+			var observer = view.observers[i];
+			if(observer.in_use === false)
+			{
+				observer.label = label;
+				observer.target = target;
+				observer.property = property;
+				observer.index = index || -1;
+				if(index === -1) observer.value = target[property];
+				else observer.value = target[property][index];
+				observer.in_use = true;
+				observer.is_watching = true;
+				observer.element.classList.remove('gb-debug-hidden');
+				return;
+			}
+		}
+		LOG('No free observers available');
+	},
+	control: function(view, name, min, max, step, initial_value)
+	{
+		initial_value = initial_value;
+
+		var label = document.createElement('div');
+		label.classList.add('gb-debug-label');
+		label.innerText = name + ': ' + initial_value;
+		view.container.appendChild(label);
+
+		var slider = document.createElement('input');
+		slider.setAttribute('type', 'range');
+
+		slider.classList.add('gb-debug-slider');
+		slider.min = min;
+		slider.max = max;
+		slider.step = step;
+		slider.defaultValue = initial_value;
+		slider.value = initial_value;
+		view.container.appendChild(slider);
+
+		var controller = new gb.Debug_Controller();
+		controller.name = name;
+		controller.label = label;
+		controller.slider = slider;
+		controller.value = initial_value;
+		view.controllers.push(controller);
+
+		return controller;
+	},
+}
 
 var v3 = gb.vec3;
 
@@ -3170,6 +3428,12 @@ var camera;
 var construct;
 var material;
 var square;
+
+//DEBUG
+var debug_view;
+var fov_slider;
+var size_slider;
+//END
 
 function init()
 {
@@ -3188,6 +3452,7 @@ function init()
 	{
 		container: gb.dom.get('.canvas'),
 		fill_container: true,
+		antialias: false,
 	});
 
 	var vs = 'attribute vec3 position;attribute vec4 color;uniform mat4 mvp;varying vec4 _color;void main(){_color = color;gl_Position = mvp * vec4(position, 1.0);}';
@@ -3199,12 +3464,14 @@ function init()
 	{
 		buffer_size: 1024,
 	});
+
+	debug_view = gb.debug_view.new(gb.dom.get('.canvas'), 10,10, 1.0);
 	//END
 
 	construct = gb.scene.new();
 	
-	camera = gb.camera.new();
-	camera.entity.position[2] = 3.0;
+	camera = gb.camera.new(gb.Projection.ORTHO, 0, 100, 60, 0, gb.webgl.view[1]);
+	gb.vec3.set(camera.entity.position, gb.webgl.view[0] / 2, gb.webgl.view[1] / 2, 3.0);
 	gb.scene.add(camera, construct);
 
 	var vb = gb.vertex_buffer.new();
@@ -3218,14 +3485,20 @@ function init()
     mesh.vertex_offset = 0;
     mesh.index_offset = 0;
     mesh.triangle_offset = 0;
-    push_quad(mesh, 0,0,1,1);
-    push_quad(mesh, 1,1,1.5,1.5);
-    push_quad(mesh, 0,2,3.0,3.0);
+    push_quad(mesh, 0,0,gb.webgl.view[0] / 2, gb.webgl.view[1] / 2,	 0.5,0.3,0.2,1.0);
+    //push_quad(mesh, 1,1,1.5,1.5, 0.5,0.5,0.2,1.0);
+    //push_quad(mesh, 0,2,3.0,3.0, 0.5,0.3,0.5,1.0);
 
 	gb.mesh.update(mesh);	
 
 	square = gb.entity.mesh(mesh, material);
 	gb.scene.add(square, construct);
+
+	gb.debug_view.watch(debug_view, 'Pos', camera.entity, 'position');
+	gb.debug_view.watch(debug_view, 'Mouse', gb.input, 'mouse_position');
+
+	fov_slider = gb.debug_view.control(debug_view, 'fov', 1, 60, 1, 60);
+	size_slider = gb.debug_view.control(debug_view, 'size', 1, 1024, 1, gb.webgl.view[1]);
 }
 
 function update(dt)
@@ -3233,8 +3506,21 @@ function update(dt)
 	gb.camera.fly(camera, dt, 80);
 	gb.scene.update(construct, dt);
 
+	/*
+	camera.fov = fov_slider.value;
+	camera.scale = size_slider.value;
+	gb.camera.update_projection(camera, gb.webgl.view);
+	*/
+
+	var mp = gb.input.mouse_position;
+	var mx = mp[0];
+	var my = gb.webgl.view[1] - mp[1];
+
 	gb.gl_draw.clear();
-	gb.gl_draw.line(v3.tmp(0,0,0), v3.tmp(1,1,1));
+	gb.gl_draw.line(v3.tmp(mx,0,0), v3.tmp(mx,gb.webgl.view[1],0));
+	gb.gl_draw.line(v3.tmp(0,my,0), v3.tmp(gb.webgl.view[0],my,0));
+
+	gb.debug_view.update(debug_view);
 }
 
 function render()
@@ -3256,17 +3542,17 @@ function render()
 	gb.gl_draw.render(camera);
 }
 
-function push_quad(mesh, ax,ay, bx,by)
+function push_quad(mesh, ax,ay, bx,by, r,g,b,a)
 {
 	var d = mesh.vertex_buffer.data;
 	var i = mesh.index_buffer.data;
 	var io = mesh.index_offset;
 	var to = mesh.triangle_offset;
 
-	push_vertex(mesh, ax,ay);
-	push_vertex(mesh, bx,ay);
-	push_vertex(mesh, bx,by);
-	push_vertex(mesh, ax,by);
+	push_vertex(mesh, ax,ay, r,g,b,a);
+	push_vertex(mesh, bx,ay, r,g,b,a);
+	push_vertex(mesh, bx,by, r,g,b,a);
+	push_vertex(mesh, ax,by, r,g,b,a);
 
 	i[io]   = to;
 	i[io+1] = to+1;
@@ -3279,7 +3565,7 @@ function push_quad(mesh, ax,ay, bx,by)
 	mesh.index_offset += 6;
 	mesh.triangle_offset += 4;
 }
-function push_vertex(mesh, x,y)
+function push_vertex(mesh, x,y, r,g,b,a)
 {
 	var d = mesh.vertex_buffer.data;
 	var vo = mesh.vertex_offset;
@@ -3287,10 +3573,10 @@ function push_vertex(mesh, x,y)
 	d[vo]   = x;
 	d[vo+1] = y;
 
-	d[vo+2] = 1.0;
-	d[vo+3] = 1.0;
-	d[vo+4] = 1.0;
-	d[vo+5] = 1.0;
+	d[vo+2] = r;
+	d[vo+3] = g;
+	d[vo+4] = b;
+	d[vo+5] = a;
 
 	mesh.vertex_offset += 6;
 	mesh.vertex_count += 1;

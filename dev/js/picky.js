@@ -5,6 +5,12 @@ var construct;
 var material;
 var square;
 
+//DEBUG
+var debug_view;
+var fov_slider;
+var size_slider;
+//END
+
 function init()
 {
 	gb.init(
@@ -22,6 +28,7 @@ function init()
 	{
 		container: gb.dom.get('.canvas'),
 		fill_container: true,
+		antialias: false,
 	});
 
 	var vs = 'attribute vec3 position;attribute vec4 color;uniform mat4 mvp;varying vec4 _color;void main(){_color = color;gl_Position = mvp * vec4(position, 1.0);}';
@@ -33,12 +40,14 @@ function init()
 	{
 		buffer_size: 1024,
 	});
+
+	debug_view = gb.debug_view.new(gb.dom.get('.canvas'), 10,10, 1.0);
 	//END
 
 	construct = gb.scene.new();
 	
-	camera = gb.camera.new();
-	camera.entity.position[2] = 3.0;
+	camera = gb.camera.new(gb.Projection.ORTHO, 0, 100, 60, 0, gb.webgl.view[1]);
+	gb.vec3.set(camera.entity.position, gb.webgl.view[0] / 2, gb.webgl.view[1] / 2, 3.0);
 	gb.scene.add(camera, construct);
 
 	var vb = gb.vertex_buffer.new();
@@ -52,14 +61,20 @@ function init()
     mesh.vertex_offset = 0;
     mesh.index_offset = 0;
     mesh.triangle_offset = 0;
-    push_quad(mesh, 0,0,1,1);
-    push_quad(mesh, 1,1,1.5,1.5);
-    push_quad(mesh, 0,2,3.0,3.0);
+    push_quad(mesh, 0,0,gb.webgl.view[0] / 2, gb.webgl.view[1] / 2,	 0.5,0.3,0.2,1.0);
+    //push_quad(mesh, 1,1,1.5,1.5, 0.5,0.5,0.2,1.0);
+    //push_quad(mesh, 0,2,3.0,3.0, 0.5,0.3,0.5,1.0);
 
 	gb.mesh.update(mesh);	
 
 	square = gb.entity.mesh(mesh, material);
 	gb.scene.add(square, construct);
+
+	gb.debug_view.watch(debug_view, 'Pos', camera.entity, 'position');
+	gb.debug_view.watch(debug_view, 'Mouse', gb.input, 'mouse_position');
+
+	fov_slider = gb.debug_view.control(debug_view, 'fov', 1, 60, 1, 60);
+	size_slider = gb.debug_view.control(debug_view, 'size', 1, 1024, 1, gb.webgl.view[1]);
 }
 
 function update(dt)
@@ -67,8 +82,21 @@ function update(dt)
 	gb.camera.fly(camera, dt, 80);
 	gb.scene.update(construct, dt);
 
+	/*
+	camera.fov = fov_slider.value;
+	camera.scale = size_slider.value;
+	gb.camera.update_projection(camera, gb.webgl.view);
+	*/
+
+	var mp = gb.input.mouse_position;
+	var mx = mp[0];
+	var my = gb.webgl.view[1] - mp[1];
+
 	gb.gl_draw.clear();
-	gb.gl_draw.line(v3.tmp(0,0,0), v3.tmp(1,1,1));
+	gb.gl_draw.line(v3.tmp(mx,0,0), v3.tmp(mx,gb.webgl.view[1],0));
+	gb.gl_draw.line(v3.tmp(0,my,0), v3.tmp(gb.webgl.view[0],my,0));
+
+	gb.debug_view.update(debug_view);
 }
 
 function render()
@@ -90,17 +118,17 @@ function render()
 	gb.gl_draw.render(camera);
 }
 
-function push_quad(mesh, ax,ay, bx,by)
+function push_quad(mesh, ax,ay, bx,by, r,g,b,a)
 {
 	var d = mesh.vertex_buffer.data;
 	var i = mesh.index_buffer.data;
 	var io = mesh.index_offset;
 	var to = mesh.triangle_offset;
 
-	push_vertex(mesh, ax,ay);
-	push_vertex(mesh, bx,ay);
-	push_vertex(mesh, bx,by);
-	push_vertex(mesh, ax,by);
+	push_vertex(mesh, ax,ay, r,g,b,a);
+	push_vertex(mesh, bx,ay, r,g,b,a);
+	push_vertex(mesh, bx,by, r,g,b,a);
+	push_vertex(mesh, ax,by, r,g,b,a);
 
 	i[io]   = to;
 	i[io+1] = to+1;
@@ -113,7 +141,7 @@ function push_quad(mesh, ax,ay, bx,by)
 	mesh.index_offset += 6;
 	mesh.triangle_offset += 4;
 }
-function push_vertex(mesh, x,y)
+function push_vertex(mesh, x,y, r,g,b,a)
 {
 	var d = mesh.vertex_buffer.data;
 	var vo = mesh.vertex_offset;
@@ -121,10 +149,10 @@ function push_vertex(mesh, x,y)
 	d[vo]   = x;
 	d[vo+1] = y;
 
-	d[vo+2] = 1.0;
-	d[vo+3] = 1.0;
-	d[vo+4] = 1.0;
-	d[vo+5] = 1.0;
+	d[vo+2] = r;
+	d[vo+3] = g;
+	d[vo+4] = b;
+	d[vo+5] = a;
 
 	mesh.vertex_offset += 6;
 	mesh.vertex_count += 1;

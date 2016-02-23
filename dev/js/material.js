@@ -2,7 +2,7 @@ gb.Material = function()
 {
     this.name;
     this.shader;
-    this.mvp;
+    //this.mvp;
 }
 gb.material = 
 {

@@ -54,12 +54,20 @@ gb.gl_draw =
 		gl.update_mesh(_t.mesh);
 		gl.use_shader(_t.material.shader);
 		//gb.material.set_camera_uniforms(_t.material, camera);
-		gb.material.set_matrix_uniforms(_t.material, _t.matrix, camera);
+
+		if(camera !== null)
+		{
+			//gb.material.set_matrix_uniforms(_t.material, _t.matrix, camera);
+			gb.mat4.mul(_t.material.mvp, _t.matrix, camera.view_projection);
+			gl.ctx.depthRange(camera.near, camera.far);
+		}
+		else
+		{
+			_t.material.mvp = _t.matrix;
+		}
 		gl.link_attributes(_t.material.shader, _t.mesh);
 		gl.set_uniforms(_t.material);
 		gl.set_state(gl.ctx.DEPTH_TEST, false);
-		//gl.set_render_target(target, false);
-		gl.ctx.depthRange(camera.near, camera.far);
 		gl.ctx.lineWidth = _t.thickness;
 		gl.draw_mesh(_t.mesh);
 

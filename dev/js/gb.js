@@ -96,6 +96,7 @@ var gb =
 		gb.stack.clear_all();
 		
 		var dt = gb.time.dt;
+
 		gb.update(dt);
 		gb.input.update();
 		gb.render();
