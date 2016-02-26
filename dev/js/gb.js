@@ -20,10 +20,6 @@ var gb =
 		frame_skip: false,
 		update: null,
 		render: null,
-		input:
-		{
-			root: document,
-		},
 	},
 
 	allow_update: false,
@@ -51,10 +47,10 @@ var gb =
 		for(var k in config.config)
 			gb.config[k] = config.config[k];
 
-		for(var k in config.input)
-			gb.config.input[k] = config.input[k];
+		//for(var k in config.input)
+		//	gb.config.input[k] = config.input[k];
 
-		gb.input.init(gb.config.input);
+		//gb.input.init(gb.config.input);
 
 		if(gb.config.update) gb.update = config.config.update;
 		if(gb.config.render) gb.render = config.config.render;

@@ -12,6 +12,16 @@ html, body
 }
 .canvas
 {
-	width: 100vw;
+	position: absolute;
+	left: 50px;
+	width: calc(100vw - 50px);
 	height: 100vh;
+	pointer-events: visible;
+}
+.toolbar
+{
+	position: absolute;
+	width: 50px;
+	height: 100vh;
+	background: rgb(40,40,40);
 }

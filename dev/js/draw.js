@@ -86,6 +86,13 @@ gb.gl_draw =
 	{
 		gb.color.set(gb.gl_draw.color, r,g,b,a);
 	},
+
+	line_f: function(ax,ay,az, bx,by,bz)
+	{
+		var i = gb.vec3.stack.index;
+		gb.gl_draw.line(gb.vec3.tmp(ax,ay,az), gb.vec3.tmp(bx,by,bz));
+		gb.vec3.stack.index = i;
+	},
 	line: function(start, end)
 	{
 		var _t = gb.gl_draw;

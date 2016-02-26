@@ -117,18 +117,18 @@ gb.vec2 =
 		_t.set(r,x,y);
 		_t.normalized(r,r);
 	},
-	angle: function(a, b)
+	angle: function(a)
+	{
+		var v2 = gb.vec2.tmp(a[0], a[1]);
+		gb.vec2.normalized(v2,v2);
+
+		return gb.math.atan2(v2[1], v2[0]) * gb.math.RAD2DEG;
+	},
+	angle_between: function(a, b)
 	{
 		var _t = gb.vec2;
 		var m = gb.math;
-		var l = _t.length(a) * _t.length(b);
-
-		if(l < m.EPSILON) l = m.EPSILON;
-		
-		var f = _t.dot(a, b) / l;
-		if(f > 1) return m.acos(1);
-		else if(f < 1) return m.acos(-1);
-		else return m.acos(f);
+		return gb.math.atan2(b[0]-a[0], b[1]-a[1]) * gb.math.RAD2DEG;
 	},
 	min: function(r, a,b)
 	{

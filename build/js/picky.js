@@ -22,10 +22,6 @@ var gb =
 		frame_skip: false,
 		update: null,
 		render: null,
-		input:
-		{
-			root: document,
-		},
 	},
 
 	allow_update: false,
@@ -53,10 +49,10 @@ var gb =
 		for(var k in config.config)
 			gb.config[k] = config.config[k];
 
-		for(var k in config.input)
-			gb.config.input[k] = config.input[k];
+		//for(var k in config.input)
+		//	gb.config.input[k] = config.input[k];
 
-		gb.input.init(gb.config.input);
+		//gb.input.init(gb.config.input);
 
 		if(gb.config.update) gb.update = config.config.update;
 		if(gb.config.render) gb.render = config.config.render;
@@ -445,18 +441,18 @@ gb.vec2 =
 		_t.set(r,x,y);
 		_t.normalized(r,r);
 	},
-	angle: function(a, b)
+	angle: function(a)
+	{
+		var v2 = gb.vec2.tmp(a[0], a[1]);
+		gb.vec2.normalized(v2,v2);
+
+		return gb.math.atan2(v2[1], v2[0]) * gb.math.RAD2DEG;
+	},
+	angle_between: function(a, b)
 	{
 		var _t = gb.vec2;
 		var m = gb.math;
-		var l = _t.length(a) * _t.length(b);
-
-		if(l < m.EPSILON) l = m.EPSILON;
-		
-		var f = _t.dot(a, b) / l;
-		if(f > 1) return m.acos(1);
-		else if(f < 1) return m.acos(-1);
-		else return m.acos(f);
+		return gb.math.atan2(b[0]-a[0], b[1]-a[1]) * gb.math.RAD2DEG;
 	},
 	min: function(r, a,b)
 	{
@@ -1567,7 +1563,7 @@ gb.time =
 {
 	start: 0,
     elapsed: 0,
-    time: 0,
+    now: 0,
     frame: 0,
     last: 0,
     next: 0,
@@ -1584,16 +1580,17 @@ gb.time =
         var _t = gb.time;
         _t.elapsed = 0;
         _t.frame = 0;
-        _t.start = now;
-        _t.time = now;
-        _t.last = now;
-        _t.next = now;
+        _t.start = t;
+        _t.now = t;
+        _t.last = t;
+        _t.next = t;
         _t.paused = false;
     },
     update: function(t)
     {
         var _t = gb.time;
 
+        /*
         var now = performance.now() / 1000;
         while(_t.time < now)
         {
@@ -1604,9 +1601,12 @@ gb.time =
             _t.frame++;
             _t.next += _t.step;
         }
+        */
 
-        _t.dt = _t.time - _t.last;
-        _t.last = _t.time;
+        _t.frame++;
+        _t.now = t;
+        _t.dt = t - _t.last;
+        _t.last = t;
         _t.elapsed += _t.dt;
     },
 }
@@ -1769,12 +1769,13 @@ gb.input =
 	mouse_move: function(e)
 	{
 		var _t = gb.input;
-		var x = e.clientX;
-		var y = e.clientY;
+		var x = e.offsetX;
+		var y = e.offsetY;
 		var dx = e.movementX;
 		var dy = e.movementY;
 		gb.vec2.set(_t.mouse_position, x, y);
 		gb.vec2.set(_t.mouse_delta, dx, dy);
+		//console.log(e);
 	},
 	mouse_wheel: function(e)
 	{
@@ -2976,6 +2977,13 @@ gb.gl_draw =
 	{
 		gb.color.set(gb.gl_draw.color, r,g,b,a);
 	},
+
+	line_f: function(ax,ay,az, bx,by,bz)
+	{
+		var i = gb.vec3.stack.index;
+		gb.gl_draw.line(gb.vec3.tmp(ax,ay,az), gb.vec3.tmp(bx,by,bz));
+		gb.vec3.stack.index = i;
+	},
 	line: function(start, end)
 	{
 		var _t = gb.gl_draw;
@@ -3428,6 +3436,9 @@ var camera;
 var construct;
 var material;
 var square;
+gb.mouse_angle = 0;
+
+var rectangles = [];
 
 //DEBUG
 var debug_view;
@@ -3447,6 +3458,11 @@ function init()
 		}
 	});
 
+	gb.input.init(
+	{
+		root: gb.dom.get('.canvas'),
+	});
+
 	//gb.canvas.init(gb.dom.get('.canvas'));
 	gb.webgl.init(
 	{
@@ -3454,6 +3470,8 @@ function init()
 		fill_container: true,
 		antialias: false,
 	});
+
+
 
 	var vs = 'attribute vec3 position;attribute vec4 color;uniform mat4 mvp;varying vec4 _color;void main(){_color = color;gl_Position = mvp * vec4(position, 1.0);}';
     var fs = 'precision highp float;varying vec4 _color;void main(){gl_FragColor = _color;}'; 
@@ -3485,7 +3503,10 @@ function init()
     mesh.vertex_offset = 0;
     mesh.index_offset = 0;
     mesh.triangle_offset = 0;
-    push_quad(mesh, 0,0,gb.webgl.view[0] / 2, gb.webgl.view[1] / 2,	 0.5,0.3,0.2,1.0);
+
+    //rectangles.push([0,0,300,300]);;
+
+    push_quad(mesh, 0,0,gb.webgl.view[0], gb.webgl.view[1],	 0.5,0.3,0.2,1.0);
     //push_quad(mesh, 1,1,1.5,1.5, 0.5,0.5,0.2,1.0);
     //push_quad(mesh, 0,2,3.0,3.0, 0.5,0.3,0.5,1.0);
 
@@ -3496,6 +3517,7 @@ function init()
 
 	gb.debug_view.watch(debug_view, 'Pos', camera.entity, 'position');
 	gb.debug_view.watch(debug_view, 'Mouse', gb.input, 'mouse_position');
+	gb.debug_view.watch(debug_view, 'Angle', gb, 'mouse_angle');
 
 	fov_slider = gb.debug_view.control(debug_view, 'fov', 1, 60, 1, 60);
 	size_slider = gb.debug_view.control(debug_view, 'size', 1, 1024, 1, gb.webgl.view[1]);
@@ -3512,13 +3534,34 @@ function update(dt)
 	gb.camera.update_projection(camera, gb.webgl.view);
 	*/
 
+	var draw = gb.gl_draw;
+	var view = gb.webgl.view;
+
 	var mp = gb.input.mouse_position;
 	var mx = mp[0];
-	var my = gb.webgl.view[1] - mp[1];
+	var my = view[1] - mp[1];
 
-	gb.gl_draw.clear();
-	gb.gl_draw.line(v3.tmp(mx,0,0), v3.tmp(mx,gb.webgl.view[1],0));
-	gb.gl_draw.line(v3.tmp(0,my,0), v3.tmp(gb.webgl.view[0],my,0));
+	draw.clear();
+	draw.line_f(mx,0,0, mx,view[1],0);
+	draw.line_f(0,my,0, view[0],my,0);
+
+	draw.set_color(0.6,0.2,0.2,1.0);
+	draw.line_f(0,0,0, view[0],view[1], 0);
+	draw.line_f(view[0],0,0, 0,view[1],0);
+
+	draw.set_color(0.5,0.5,1.0,1.0);
+
+	gb.mouse_angle = (gb.vec2.angle_between(gb.vec2.tmp(view[0] / 2, view[1] / 2), mp) + 180);
+
+	if((gb.mouse_angle > 0 && gb.mouse_angle < 45))
+	{
+		draw.line_f(view[0] / 2,0,0, view[0] / 2,view[1],0);
+	}
+	else
+	{
+		draw.line_f(0,view[1] / 2,0, view[0],view[1]/2,0);
+	}
+	
 
 	gb.debug_view.update(debug_view);
 }

@@ -4,6 +4,9 @@ var camera;
 var construct;
 var material;
 var square;
+gb.mouse_angle = 0;
+
+var rectangles = [];
 
 //DEBUG
 var debug_view;
@@ -23,6 +26,11 @@ function init()
 		}
 	});
 
+	gb.input.init(
+	{
+		root: gb.dom.get('.canvas'),
+	});
+
 	//gb.canvas.init(gb.dom.get('.canvas'));
 	gb.webgl.init(
 	{
@@ -30,6 +38,8 @@ function init()
 		fill_container: true,
 		antialias: false,
 	});
+
+
 
 	var vs = 'attribute vec3 position;attribute vec4 color;uniform mat4 mvp;varying vec4 _color;void main(){_color = color;gl_Position = mvp * vec4(position, 1.0);}';
     var fs = 'precision highp float;varying vec4 _color;void main(){gl_FragColor = _color;}'; 
@@ -61,7 +71,10 @@ function init()
     mesh.vertex_offset = 0;
     mesh.index_offset = 0;
     mesh.triangle_offset = 0;
-    push_quad(mesh, 0,0,gb.webgl.view[0] / 2, gb.webgl.view[1] / 2,	 0.5,0.3,0.2,1.0);
+
+    //rectangles.push([0,0,300,300]);;
+
+    push_quad(mesh, 0,0,gb.webgl.view[0], gb.webgl.view[1],	 0.5,0.3,0.2,1.0);
     //push_quad(mesh, 1,1,1.5,1.5, 0.5,0.5,0.2,1.0);
     //push_quad(mesh, 0,2,3.0,3.0, 0.5,0.3,0.5,1.0);
 
@@ -72,6 +85,7 @@ function init()
 
 	gb.debug_view.watch(debug_view, 'Pos', camera.entity, 'position');
 	gb.debug_view.watch(debug_view, 'Mouse', gb.input, 'mouse_position');
+	gb.debug_view.watch(debug_view, 'Angle', gb, 'mouse_angle');
 
 	fov_slider = gb.debug_view.control(debug_view, 'fov', 1, 60, 1, 60);
 	size_slider = gb.debug_view.control(debug_view, 'size', 1, 1024, 1, gb.webgl.view[1]);
@@ -88,13 +102,34 @@ function update(dt)
 	gb.camera.update_projection(camera, gb.webgl.view);
 	*/
 
+	var draw = gb.gl_draw;
+	var view = gb.webgl.view;
+
 	var mp = gb.input.mouse_position;
 	var mx = mp[0];
-	var my = gb.webgl.view[1] - mp[1];
+	var my = view[1] - mp[1];
 
-	gb.gl_draw.clear();
-	gb.gl_draw.line(v3.tmp(mx,0,0), v3.tmp(mx,gb.webgl.view[1],0));
-	gb.gl_draw.line(v3.tmp(0,my,0), v3.tmp(gb.webgl.view[0],my,0));
+	draw.clear();
+	draw.line_f(mx,0,0, mx,view[1],0);
+	draw.line_f(0,my,0, view[0],my,0);
+
+	draw.set_color(0.6,0.2,0.2,1.0);
+	draw.line_f(0,0,0, view[0],view[1], 0);
+	draw.line_f(view[0],0,0, 0,view[1],0);
+
+	draw.set_color(0.5,0.5,1.0,1.0);
+
+	gb.mouse_angle = (gb.vec2.angle_between(gb.vec2.tmp(view[0] / 2, view[1] / 2), mp) + 180);
+
+	if((gb.mouse_angle > 0 && gb.mouse_angle < 45))
+	{
+		draw.line_f(view[0] / 2,0,0, view[0] / 2,view[1],0);
+	}
+	else
+	{
+		draw.line_f(0,view[1] / 2,0, view[0],view[1]/2,0);
+	}
+	
 
 	gb.debug_view.update(debug_view);
 }

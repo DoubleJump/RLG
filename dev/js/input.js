@@ -157,12 +157,13 @@ gb.input =
 	mouse_move: function(e)
 	{
 		var _t = gb.input;
-		var x = e.clientX;
-		var y = e.clientY;
+		var x = e.offsetX;
+		var y = e.offsetY;
 		var dx = e.movementX;
 		var dy = e.movementY;
 		gb.vec2.set(_t.mouse_position, x, y);
 		gb.vec2.set(_t.mouse_delta, dx, dy);
+		//console.log(e);
 	},
 	mouse_wheel: function(e)
 	{
