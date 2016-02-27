@@ -2,12 +2,14 @@
 
 //INCLUDE dev/js/gb.js
 //INCLUDE dev/js/stack.js
+//INCLUDE dev/js/array.js
 //INCLUDE dev/js/ajax.js
 //INCLUDE dev/js/serialize.js
 //INCLUDE dev/js/math.js
 //INCLUDE dev/js/vector.js
 //INCLUDE dev/js/matrix.js
 //INCLUDE dev/js/color.js
+//INCLUDE dev/js/rect.js
 //INCLUDE dev/js/quaternion.js
 //INCLUDE dev/js/projections.js
 //INCLUDE dev/js/time.js

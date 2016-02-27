@@ -9,7 +9,8 @@ gb.KeyState =
 gb.Keys = 
 {
 	mouse_left: 0,
-	mouse_right: 1,
+	mouse_middle: 1,
+	mouse_right: 2,
 	backspace: 8,
 	tab: 9,
 	enter: 13,
@@ -73,14 +74,15 @@ gb.input =
 	mouse_scroll: 0,
 
 	keys: new Uint8Array(256),
+	prevents: new Uint8Array(256),
 
 	init: function(config)
 	{
 		var root = config.root;
 
 		var _t = gb.input;
-		root.onkeydown 	 = _t.key_down;
-		root.onkeyup 	 = _t.key_up;
+		window.onkeydown = _t.key_down;
+		window.onkeyup 	 = _t.key_up;
 		root.onmousedown = _t.key_down;
 		root.onmouseup   = _t.key_up;
 		root.onmousemove = _t.mouse_move;
@@ -89,6 +91,7 @@ gb.input =
 		for(var i = 0; i < 256; ++i)
 		{
 			_t.keys[i] = gb.KeyState.RELEASED;
+			_t.prevents[i] = 0;
 		}
 
 	  	_t.root = root;
@@ -141,7 +144,8 @@ gb.input =
 		if(_t.keys[kc] != gb.KeyState.HELD) 
 			_t.keys[kc] = gb.KeyState.DOWN;
 
-		//e.preventDefault();
+		if(_t.prevents[kc] === 1) e.preventDefault();
+		//LOG(kc);
 	},
 	key_up: function(e)
 	{
@@ -151,7 +155,7 @@ gb.input =
 		if(_t.keys[kc] != gb.KeyState.RELEASED) 
 			_t.keys[kc] = gb.KeyState.UP;
 
-		//e.preventDefault();
+		if(_t.prevents[kc] === 1) e.preventDefault();
 	},
 
 	mouse_move: function(e)
@@ -163,7 +167,6 @@ gb.input =
 		var dy = e.movementY;
 		gb.vec2.set(_t.mouse_position, x, y);
 		gb.vec2.set(_t.mouse_delta, dx, dy);
-		//console.log(e);
 	},
 	mouse_wheel: function(e)
 	{

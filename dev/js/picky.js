@@ -6,13 +6,30 @@ var material;
 var square;
 gb.mouse_angle = 0;
 
-var rectangles = [];
+var ToolMode = 
+{
+	VERTICAL: 0,
+	HORIZONTAL: 1,
+	POINT: 2,
+	COUNT: 3,
+};
+var tool_mode = ToolMode.VERTICAL;
+
+var quads = [];
 
 //DEBUG
 var debug_view;
 var fov_slider;
 var size_slider;
 //END
+
+var Quad = function(ax,ay,bx,by, r,g,b)
+{
+	this.rect = new gb.rect.new(ax,ay,bx,by);
+	this.depth = 0;
+	this.color = new gb.color.new(r,g,b,1);
+	this.id = -1;
+}
 
 function init()
 {
@@ -39,7 +56,7 @@ function init()
 		antialias: false,
 	});
 
-
+	//LOG(gb.webgl.view);
 
 	var vs = 'attribute vec3 position;attribute vec4 color;uniform mat4 mvp;varying vec4 _color;void main(){_color = color;gl_Position = mvp * vec4(position, 1.0);}';
     var fs = 'precision highp float;varying vec4 _color;void main(){gl_FragColor = _color;}'; 
@@ -52,6 +69,7 @@ function init()
 	});
 
 	debug_view = gb.debug_view.new(gb.dom.get('.canvas'), 10,10, 1.0);
+	gb.debug_view.hide(debug_view);
 	//END
 
 	construct = gb.scene.new();
@@ -61,7 +79,7 @@ function init()
 	gb.scene.add(camera, construct);
 
 	var vb = gb.vertex_buffer.new();
-	gb.vertex_buffer.add_attribute(vb, 'position', 2, false);
+	gb.vertex_buffer.add_attribute(vb, 'position', 3, false);
 	gb.vertex_buffer.add_attribute(vb, 'color', 4, true);
 	gb.vertex_buffer.alloc(vb, 1024);
 
@@ -72,23 +90,21 @@ function init()
     mesh.index_offset = 0;
     mesh.triangle_offset = 0;
 
-    //rectangles.push([0,0,300,300]);;
-
-    push_quad(mesh, 0,0,gb.webgl.view[0], gb.webgl.view[1],	 0.5,0.3,0.2,1.0);
-    //push_quad(mesh, 1,1,1.5,1.5, 0.5,0.5,0.2,1.0);
-    //push_quad(mesh, 0,2,3.0,3.0, 0.5,0.3,0.5,1.0);
-
-	gb.mesh.update(mesh);	
+    quads.push(new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], 0.3,0.3,0.3));
+    update_quad_array(quads);
+    push_quads(mesh, quads);
 
 	square = gb.entity.mesh(mesh, material);
 	gb.scene.add(square, construct);
 
+	//DEBUG
 	gb.debug_view.watch(debug_view, 'Pos', camera.entity, 'position');
 	gb.debug_view.watch(debug_view, 'Mouse', gb.input, 'mouse_position');
 	gb.debug_view.watch(debug_view, 'Angle', gb, 'mouse_angle');
 
 	fov_slider = gb.debug_view.control(debug_view, 'fov', 1, 60, 1, 60);
 	size_slider = gb.debug_view.control(debug_view, 'size', 1, 1024, 1, gb.webgl.view[1]);
+	//END
 }
 
 function update(dt)
@@ -96,54 +112,98 @@ function update(dt)
 	gb.camera.fly(camera, dt, 80);
 	gb.scene.update(construct, dt);
 
-	/*
-	camera.fov = fov_slider.value;
-	camera.scale = size_slider.value;
-	gb.camera.update_projection(camera, gb.webgl.view);
-	*/
-
 	var draw = gb.gl_draw;
 	var view = gb.webgl.view;
+	var v2 = gb.vec2;
 
+	var press = gb.input.down(gb.Keys.mouse_left);
 	var mp = gb.input.mouse_position;
 	var mx = mp[0];
 	var my = view[1] - mp[1];
+	//TODO: will have to project this if we move the camera at all
+
+	//TODO: global and local split
+	//TODO: multisplit on mouse wheel
+	//TODO: joining
+	//TODO: floating quads
 
 	draw.clear();
-	draw.line_f(mx,0,0, mx,view[1],0);
-	draw.line_f(0,my,0, view[0],my,0);
 
-	draw.set_color(0.6,0.2,0.2,1.0);
-	draw.line_f(0,0,0, view[0],view[1], 0);
-	draw.line_f(view[0],0,0, 0,view[1],0);
-
-	draw.set_color(0.5,0.5,1.0,1.0);
-
-	gb.mouse_angle = (gb.vec2.angle_between(gb.vec2.tmp(view[0] / 2, view[1] / 2), mp) + 180);
-
-	if((gb.mouse_angle > 0 && gb.mouse_angle < 45))
+	if(gb.input.down(gb.Keys.r))
 	{
-		draw.line_f(view[0] / 2,0,0, view[0] / 2,view[1],0);
+		quads = [];
+		quads.push(new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], 0.3,0.3,0.3));
+	    update_quad_array(quads);
+	    push_quads(square.mesh, quads);
 	}
-	else
+
+	var quad_id = find_quad_at_point(quads, mx,my);
+	if(quad_id !== -1)
 	{
-		draw.line_f(0,view[1] / 2,0, view[0],view[1]/2,0);
+		highlight_quad(quads, quad_id);
+		gb.gl_draw.set_color(1,1,1,0.1);
+
+		var active_quad = quads[quad_id];
+		var active_rect = active_quad.rect;
+		switch(tool_mode)
+		{
+			case ToolMode.HORIZONTAL:
+
+				//draw split
+				draw.line_f(active_rect.min_x,my,0, active_rect.max_x,my,0);
+
+				//check action
+				if(press)
+				{
+					split_quad_horizontal(quad_id, quads, mx,my);
+					push_quads(square.mesh, quads);
+				}
+
+			break;
+			case ToolMode.VERTICAL:
+
+				//draw split
+				draw.line_f(mx, active_rect.max_y,0, mx,active_rect.min_y,0);
+
+				//check action
+				if(press)
+				{
+					split_quad_vertical(quad_id, quads, mx,my);
+					push_quads(square.mesh, quads);
+				}
+
+			break;
+			case ToolMode.POINT:
+
+				//draw split
+				draw.line_f(mx, active_rect.max_y,0, mx,active_rect.min_y,0);
+				draw.line_f(active_rect.min_x,my,0, active_rect.max_x,my,0);
+
+				//check action
+				if(press)
+				{
+					split_quad_at_point(quad_id, quads, mx,my);
+					push_quads(square.mesh, quads);
+				}
+
+			break;
+		}
 	}
-	
+
+	// cycle tools
+
+	if(gb.input.down(gb.Keys.z))
+	{
+		tool_mode++;
+		if(tool_mode === ToolMode.COUNT)
+			tool_mode = 0;
+	}
 
 	gb.debug_view.update(debug_view);
 }
 
 function render()
 {
-	/*
-	gb.canvas.clear('#CCCCCC');
-
-	var m_pos = gb.input.mouse_position;
-	gb.canvas.line(m_pos[0], 0, m_pos[0], gb.canvas.canvas.height);
-	gb.canvas.stroke(4, '#EEEEEE');
-	*/
-
 	//DEBUG
 	gb.webgl.verify_context();
 	//END
@@ -153,17 +213,96 @@ function render()
 	gb.gl_draw.render(camera);
 }
 
-function push_quad(mesh, ax,ay, bx,by, r,g,b,a)
+function highlight_quad(array, id)
+{
+	var quad = array[id];
+	var r = quad.rect;
+
+	gb.gl_draw.set_color(1,1,1,0.2);
+	gb.gl_draw.rect(r);
+}
+
+function find_quad_at_point(array, x,y)
+{
+	var n = array.length;
+	for(var i = 0; i < n; ++i)
+	{
+		var r = array[i].rect;
+		if(x < r.max_x && x > r.min_x && y < r.max_y && y > r.min_y)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+function split_quad_at_point(id, array, x,y)
+{
+	var quad = array[id];
+
+	// make 3 new quads, modify the first
+	var r = quad.rect;
+	var c = quad.color;
+
+	var tr = new Quad(x,y,r.max_x,r.max_y, c[0] + 0.1, c[1] + 0.1, c[2] - 0.1);
+	var bl = new Quad(r.min_x,r.min_y,x,y, c[0] + 0.1, c[1] - 0.1, c[2] + 0.1);
+	var br = new Quad(x,r.min_y,r.max_x,y, c[0] - 0.1, c[1] + 0.1, c[2] - 0.1);
+	
+	gb.rect.set_min_max(r, r.min_x, y, x, r.max_y);
+
+	gb.array.insert_items(array, id, tr,bl,br);
+
+	update_quad_array(array);
+}
+function split_quad_vertical(id, array, x,y)
+{
+	var quad = array[id];
+
+	// make 1 new quad, modify the first
+	var r = quad.rect;
+	var c = quad.color;
+
+	var right = new Quad(x,r.min_y, r.max_x,r.max_y, c[0] + 0.1, c[1] + 0.1, c[2] - 0.1);
+	gb.rect.set_min_max(r, r.min_x, r.min_y, x, r.max_y);
+
+	gb.array.insert_at(array, right, id+1);
+
+	update_quad_array(array);
+}
+function split_quad_horizontal(id, array, x,y)
+{
+	var quad = array[id];
+
+	// make 1 new quad, modify the first
+	var r = quad.rect;
+	var c = quad.color;
+
+	var bottom = new Quad(r.min_x,r.min_y, r.max_x,y, c[0] + 0.1, c[1] + 0.1, c[2] - 0.1);
+	gb.rect.set_min_max(r, r.min_x, y, r.max_x, r.max_y);
+
+	gb.array.insert_at(array, bottom, id+1);
+
+	update_quad_array(array);
+}
+
+function update_quad_array(array)
+{
+	var n = array.length;
+	for(var i = 0; i < n; ++i)
+		array[i].id = i;
+}
+
+function push_quad(mesh, rect, depth, color)
 {
 	var d = mesh.vertex_buffer.data;
 	var i = mesh.index_buffer.data;
 	var io = mesh.index_offset;
 	var to = mesh.triangle_offset;
 
-	push_vertex(mesh, ax,ay, r,g,b,a);
-	push_vertex(mesh, bx,ay, r,g,b,a);
-	push_vertex(mesh, bx,by, r,g,b,a);
-	push_vertex(mesh, ax,by, r,g,b,a);
+	push_vertex(mesh, rect.min_x,rect.min_y, depth, color);
+	push_vertex(mesh, rect.max_x,rect.min_y, depth, color);
+	push_vertex(mesh, rect.max_x,rect.max_y, depth, color);
+	push_vertex(mesh, rect.min_x,rect.max_y, depth, color);
 
 	i[io]   = to;
 	i[io+1] = to+1;
@@ -176,21 +315,33 @@ function push_quad(mesh, ax,ay, bx,by, r,g,b,a)
 	mesh.index_offset += 6;
 	mesh.triangle_offset += 4;
 }
-function push_vertex(mesh, x,y, r,g,b,a)
+function push_vertex(mesh, x,y,z, c)
 {
 	var d = mesh.vertex_buffer.data;
 	var vo = mesh.vertex_offset;
 
 	d[vo]   = x;
 	d[vo+1] = y;
+	d[vo+2] = z;
 
-	d[vo+2] = r;
-	d[vo+3] = g;
-	d[vo+4] = b;
-	d[vo+5] = a;
+	d[vo+3] = c[0];
+	d[vo+4] = c[1];
+	d[vo+5] = c[2];
+	d[vo+6] = c[3];
 
-	mesh.vertex_offset += 6;
+	mesh.vertex_offset += 7;
 	mesh.vertex_count += 1;
+}
+function push_quads(mesh, rects)
+{
+	gb.mesh.clear(mesh);
+	var n = rects.length;
+	for(var i = 0; i < n; ++i)
+	{
+		var r = rects[i];
+		push_quad(mesh, r.rect, r.depth, r.color);
+	}
+	gb.mesh.update(mesh);	
 }
 
 window.addEventListener('load', init, false);

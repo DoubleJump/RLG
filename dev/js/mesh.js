@@ -60,6 +60,12 @@ gb.vertex_buffer =
 		if(copy) new_buffer.set(vb.data);
 		vb.data = new_buffer; 
 	},
+	clear: function(vb)
+	{
+		var n = vb.data.length;
+		for(var i = 0; i < n; ++i)
+			vb.data[i] = 0;
+	},
 }
 gb.index_buffer = 
 {
@@ -69,9 +75,9 @@ gb.index_buffer =
 		if(indices) ib.data = new Uint32Array(indices);
 		return ib;
 	},
-	alloc: function(ib, count)
+	alloc: function(ib, triangles)
 	{
-		ib.data = new Uint32Array(count);		
+		ib.data = new Uint32Array(triangles * 3);		
 	},
 	resize: function(ib, count, copy)
 	{
@@ -79,6 +85,12 @@ gb.index_buffer =
 		var new_buffer = new Uint32Array(count);
 		if(copy) new_buffer.set(ib.data);
 		ib.data = new_buffer; 
+	},
+	clear: function(ib)
+	{
+		var n = ib.data.length;
+		for(var i = 0; i < n; ++i)
+			ib.data[i] = 0;
 	},
 }
 
@@ -173,5 +185,10 @@ gb.mesh =
 			src_index += attr.size;
 			dest_index += vb.stride;
 		}
+	},
+	clear: function(mesh)
+	{
+		gb.vertex_buffer.clear(mesh.vertex_buffer);
+		if(mesh.index_buffer) gb.index_buffer.clear(mesh.index_buffer);
 	},
 }

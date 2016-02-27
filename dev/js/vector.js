@@ -119,16 +119,18 @@ gb.vec2 =
 	},
 	angle: function(a)
 	{
-		var v2 = gb.vec2.tmp(a[0], a[1]);
-		gb.vec2.normalized(v2,v2);
-
-		return gb.math.atan2(v2[1], v2[0]) * gb.math.RAD2DEG;
+		return gb.math.atan2(a[1], a[0]) * gb.math.RAD2DEG;
 	},
 	angle_between: function(a, b)
 	{
 		var _t = gb.vec2;
-		var m = gb.math;
-		return gb.math.atan2(b[0]-a[0], b[1]-a[1]) * gb.math.RAD2DEG;
+		var i = _t.stack.index;
+		var ta = _t.tmp(a[0],a[1]);
+		var tb = _t.tmp(b[0],b[1]);
+		_t.normalized(ta,ta);
+		_t.normalized(tb,tb);
+
+		return gb.math.acos(gb.vec2.dot(ta,tb)) * gb.math.RAD2DEG;
 	},
 	min: function(r, a,b)
 	{

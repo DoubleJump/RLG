@@ -56,6 +56,14 @@ gb.debug_view =
 		root.appendChild(container);
 		return view;
 	},
+	show: function(view)
+	{
+		view.container.classList.remove('gb-debug-hidden');
+	},
+	hide: function(view)
+	{
+		view.container.classList.add('gb-debug-hidden');
+	},
 	set_visible: function(view)
 	{
 		if(view.visible === false) 

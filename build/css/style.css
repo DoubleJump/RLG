@@ -25,3 +25,15 @@ html, body
 	height: 100vh;
 	background: rgb(40,40,40);
 }
+.toolbar-button
+{
+	width: 50px;
+	height: 50px;
+	background: rgb(42,42,42);
+	margin-bottom: 1px;
+	pointer-events: visible;
+}
+.toolbar-button:hover
+{
+	background: rgb(60,60,60);
+}

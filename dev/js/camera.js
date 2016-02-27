@@ -24,11 +24,11 @@ gb.camera =
 		e.update = gb.camera.update;
 	    var c = new gb.Camera();
 	    c.projection_type = projection;
-	    c.near = near || 0.1;
-	    c.far = far || 100;
-	    c.fov = fov || 60;
-	    c.mask = mask || 0;
-	    c.scale = scale || 1;
+	    c.near = near;
+	    c.far = far;
+	    c.fov = fov;
+	    c.mask = mask;
+	    c.scale = scale;
 	    c.entity = e;
 	    e.camera = c;
 	    return c;

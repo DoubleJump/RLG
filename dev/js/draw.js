@@ -149,15 +149,19 @@ gb.gl_draw =
 	{
 		var _t = gb.gl_draw;
 		var v3 = gb.vec3;
-		var bl = v3.tmp(r.x, r.y);
-		var tl = v3.tmp(r.x, r.y + r.height);
-		var tr = v3.tmp(r.x + r.width, r.y + r.height);
-		var br = v3.tmp(r.x + r.width, r.y);
+		var i = v3.stack.index;
+
+		var bl = v3.tmp(r.min_x, r.min_y);
+		var tl = v3.tmp(r.min_x, r.max_y);
+		var tr = v3.tmp(r.max_x, r.max_y);
+		var br = v3.tmp(r.max_x, r.min_y);
 
 		_t.line(bl, tl);
 		_t.line(tl, tr);
 		_t.line(tr, br);
 		_t.line(br, bl);
+
+		v3.stack.index = i;
 	},
 	circle: function(radius, segments)
 	{
