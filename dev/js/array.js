@@ -14,4 +14,8 @@ gb.array =
 		Array.prototype.splice.apply(array, [index, 0].concat(insert));
 		return array;
 	},
+	remove_at: function(array, index)
+	{
+		array.splice(index, 1);
+	},
 }

@@ -41,4 +41,15 @@ gb.color =
 		r[2] = it * a[2] + t * b[2];
 		r[3] = it * a[3] + t * b[3];
 	},
+	random_gray: function(min, max)
+	{
+		var c = gb.color.new();
+		gb.color.set_random_gray(c, min, max);
+		return c;
+	},
+	set_random_gray: function(r, min, max)
+	{
+		var rand = gb.random.float(min, max);
+		gb.color.set(r, rand,rand,rand, 1.0);
+	},
 }

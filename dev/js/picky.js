@@ -1,10 +1,10 @@
-var v3 = gb.vec3;
+//TODO: global and local split
+//TODO: multisplit on mouse wheel
+//TODO: quad joining
+//TODO: floating quads
+//TODO: snapping
 
-var camera;
-var construct;
-var material;
-var square;
-gb.mouse_angle = 0;
+var v3 = gb.vec3;
 
 var ToolMode = 
 {
@@ -13,23 +13,44 @@ var ToolMode =
 	POINT: 2,
 	COUNT: 3,
 };
-var tool_mode = ToolMode.VERTICAL;
+var SplitMode = 
+{
+	GLOBAL: 0,
+	LOCAL: 1,
+	COUNT: 2,
+};
 
-var quads = [];
-
-//DEBUG
-var debug_view;
-var fov_slider;
-var size_slider;
-//END
-
-var Quad = function(ax,ay,bx,by, r,g,b)
+var QuadSelection = function()
+{
+	this.array = new Int32Array(128);
+	this.count = 0;
+}
+var Context = function()
+{
+	this.tool_mode = ToolMode.HORIZONTAL;
+	this.split_mode = SplitMode.LOCAL;
+	this.selection = new QuadSelection();
+	this.split_count = 1;
+	this.quads = [];
+	this.new_quads = [];
+	this.removed_quads = [];
+}
+var Quad = function(ax,ay,bx,by, c)
 {
 	this.rect = new gb.rect.new(ax,ay,bx,by);
 	this.depth = 0;
-	this.color = new gb.color.new(r,g,b,1);
+	this.color = c;
 	this.id = -1;
+	this.selected = false;
 }
+
+var camera;
+var construct;
+var material;
+var square;
+var context = new Context();
+
+var debug_view;
 
 function init()
 {
@@ -90,53 +111,56 @@ function init()
     mesh.index_offset = 0;
     mesh.triangle_offset = 0;
 
-    quads.push(new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], 0.3,0.3,0.3));
-    update_quad_array(quads);
-    push_quads(mesh, quads);
-
-	square = gb.entity.mesh(mesh, material);
+    square = gb.entity.mesh(mesh, material);
 	gb.scene.add(square, construct);
+
+    // CREATE CONTEXT
+
+    reset_quad_array(context);
+
+    //context.quads.push(new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], gb.color.new(0.3,0.3,0.3,1.0)));
+    //update_quad_array(context);
 
 	//DEBUG
 	gb.debug_view.watch(debug_view, 'Pos', camera.entity, 'position');
 	gb.debug_view.watch(debug_view, 'Mouse', gb.input, 'mouse_position');
-	gb.debug_view.watch(debug_view, 'Angle', gb, 'mouse_angle');
-
-	fov_slider = gb.debug_view.control(debug_view, 'fov', 1, 60, 1, 60);
-	size_slider = gb.debug_view.control(debug_view, 'size', 1, 1024, 1, gb.webgl.view[1]);
 	//END
 }
 
 function update(dt)
 {
-	gb.camera.fly(camera, dt, 80);
+	//gb.camera.fly(camera, dt, 80);
 	gb.scene.update(construct, dt);
 
 	var draw = gb.gl_draw;
 	var view = gb.webgl.view;
+	var input = gb.input;
 	var v2 = gb.vec2;
 
-	var press = gb.input.down(gb.Keys.mouse_left);
-	var mp = gb.input.mouse_position;
+	var press = input.down(gb.Keys.mouse_left);
+	var mp = input.mouse_position;
 	var mx = mp[0];
 	var my = view[1] - mp[1];
 	//TODO: will have to project this if we move the camera at all
 
-	//TODO: global and local split
-	//TODO: multisplit on mouse wheel
-	//TODO: joining
-	//TODO: floating quads
-
 	draw.clear();
 
-	if(gb.input.down(gb.Keys.r))
+	if(input.down(gb.Keys.r))
 	{
-		quads = [];
-		quads.push(new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], 0.3,0.3,0.3));
-	    update_quad_array(quads);
-	    push_quads(square.mesh, quads);
+		reset_quad_array(context);
 	}
 
+	clear_selection(context);
+	select_quads(context, mx,my);
+	draw_selection(context);
+	draw_tool(context, mx,my);
+
+	if(press)
+	{
+		split_quads(context, mx,my);
+	}
+
+	/*
 	var quad_id = find_quad_at_point(quads, mx,my);
 	if(quad_id !== -1)
 	{
@@ -148,9 +172,6 @@ function update(dt)
 		switch(tool_mode)
 		{
 			case ToolMode.HORIZONTAL:
-
-				//draw split
-				draw.line_f(active_rect.min_x,my,0, active_rect.max_x,my,0);
 
 				//check action
 				if(press)
@@ -189,14 +210,39 @@ function update(dt)
 			break;
 		}
 	}
+	*/
+
+	// set split mode
+
+	if(input.down(gb.Keys.x))
+	{
+		context.split_mode++;
+		if(context.split_mode === SplitMode.COUNT)
+			context.split_mode = 0;
+	}
+
+	// set split count
+
+	if(input.down(gb.Keys.right))
+	{
+		context.split_count++;
+		if(context.split_count > 5) context.split_count = 5;
+	}
+	else if(input.down(gb.Keys.left))
+	{
+		context.split_count--;
+		if(context.split_count < 1) context.split_count = 1;
+	}
 
 	// cycle tools
 
-	if(gb.input.down(gb.Keys.z))
+	if(input.down(gb.Keys.z))
 	{
-		tool_mode++;
-		if(tool_mode === ToolMode.COUNT)
-			tool_mode = 0;
+		context.tool_mode++;
+		if(context.tool_mode === ToolMode.COUNT)
+			context.tool_mode = 0;
+		if(context.tool_mode === ToolMode.POINT)
+			context.split_count = 1;
 	}
 
 	gb.debug_view.update(debug_view);
@@ -209,88 +255,313 @@ function render()
 	//END
 
 	gb.webgl.render_mesh(square.mesh, square.material, camera, square.world_matrix);
-
 	gb.gl_draw.render(camera);
 }
 
-function highlight_quad(array, id)
+function reset_quad_array(ctx)
 {
-	var quad = array[id];
-	var r = quad.rect;
-
-	gb.gl_draw.set_color(1,1,1,0.2);
-	gb.gl_draw.rect(r);
+	ctx.quads = [];
+	var q = new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], gb.color.new(0.3,0.3,0.3,1.0));
+	context.quads.push(q);
+    update_quad_array(context);
 }
 
-function find_quad_at_point(array, x,y)
+
+// SELECTION
+
+function clear_selection(ctx)
 {
-	var n = array.length;
+	ctx.selection.count = 0;
+	var n = ctx.quads.length;
+	for(var i = 0; i < n; ++i) 
+		ctx.quads[i].selected = false;
+}
+
+function select_quads(ctx, x,y)
+{
+	// find a selection for the current tool and split mode
+
+	if(ctx.split_mode === SplitMode.LOCAL)
+	{
+		select_quads_at_point(ctx, x,y);
+	}
+	else
+	{
+		/*
+		switch(ctx.tool_mode)
+		{
+			case ToolMode.HORIZONTAL:
+
+
+			break;
+			case ToolMode.VERTICAL:
+
+
+			break;
+			case ToolMode.POINT:
+
+
+			break;
+		}
+		*/
+	}
+}
+function select_quads_at_point(ctx, x,y)
+{
+	// TODO: take into account z-index
+	var n = ctx.quads.length;
 	for(var i = 0; i < n; ++i)
 	{
-		var r = array[i].rect;
-		if(x < r.max_x && x > r.min_x && y < r.max_y && y > r.min_y)
+		var quad = ctx.quads[i];
+		if(gb.intersect.point_rect(x,y, quad.rect) === true && quad.selected === false)
 		{
-			return i;
+			ctx.selection.array[ctx.selection.count] = quad.id;
+			ctx.selection.count++;
+			quad.selected = true;
 		}
 	}
-	return -1;
+}
+/*
+function select_quads_along_line(ctx, ax,ay, bx,by)
+{
+	var n = ctx.quads.length;
+	for(var i = 0; i < n; ++i)
+	{
+		var quad = ctx.quads[i];
+		if(gb.intersect.line_rect(ax,ay,bx,by, quad.rect) && quad.selected === false)
+		{
+			ctx.selection.array[ctx.selection_count] = quad.id;
+			ctx.selection.count++;
+			quad.selected = true;
+		}
+	}
+}
+*/
+
+function draw_selection(ctx)
+{
+	gb.gl_draw.set_color(1,0,0,0.2);
+
+	var n = ctx.selection.count;
+	for(var i = 0; i < n; ++i)
+	{
+		var id = ctx.selection.array[i];
+		var quad = ctx.quads[id];
+		var r = quad.rect;
+		gb.gl_draw.rect(r);
+	}
+}
+
+function draw_tool(ctx, x,y)
+{
+	var draw = gb.gl_draw;
+	var view = gb.webgl.view;
+	draw.set_color(1,1,1,0.2);
+
+	switch(ctx.tool_mode)
+	{
+		case ToolMode.HORIZONTAL:
+
+			if(ctx.split_mode === SplitMode.LOCAL)
+			{
+				var quad = ctx.quads[ctx.selection.array[0]];
+				var rect = quad.rect;
+
+				if(ctx.split_count === 1) 
+				{
+					draw.line_f(rect.min_x,y,0,  rect.max_x,y,0);
+				}
+				else
+				{
+					var step = rect.h / (ctx.split_count+1);
+					var ly = rect.min_y + step;
+					for(var i = 0; i < ctx.split_count; ++i)
+					{
+						draw.line_f(rect.min_x,ly,0, rect.max_x,ly,0);
+						ly += step;
+					}
+				}
+			}
+			else
+			{
+				if(ctx.split_count === 1) draw.line_f(0,y,0, view[0],y,0);
+				else
+				{
+					var step = view[1] / (ctx.split_count+1);
+					var ly = step;
+					for(var i = 0; i < ctx.split_count; ++i)
+					{
+						draw.line_f(0,ly,0, view[0],ly,0);
+						ly += step;
+					}
+				}
+			}
+
+		break;
+		case ToolMode.VERTICAL:
+
+			if(ctx.split_mode === SplitMode.LOCAL)
+			{
+				var quad = ctx.quads[ctx.selection.array[0]];
+				var rect = quad.rect;
+
+				if(ctx.split_count === 1) 
+				{
+					draw.line_f(x,rect.min_y,0,  x,rect.max_y,0);
+				}
+				else
+				{
+					var step = rect.w / (ctx.split_count+1);
+					var lx = rect.min_x + step;
+					for(var i = 0; i < ctx.split_count; ++i)
+					{
+						draw.line_f(lx,rect.min_y,0, lx,rect.max_y,0);
+						lx += step;
+					}
+				}
+			}
+			else
+			{
+				if(ctx.split_count === 1) draw.line_f(x,0,0, x,view[1],0);
+				else
+				{
+					var step = view[0] / (ctx.split_count+1);
+					var lx = step;
+					for(var i = 0; i < ctx.split_count; ++i)
+					{
+						draw.line_f(lx,0,0, lx,view[1],0);
+						lx += step;
+					}
+				}
+			}
+
+		break;
+		case ToolMode.POINT:
+
+			var quad = ctx.quads[ctx.selection.array[0]];
+			var rect = quad.rect;
+
+			draw.line_f(rect.min_x,y,0, rect.max_x,y,0);
+			draw.line_f(x,rect.min_y,0, x,rect.max_y,0);
+
+		break;
+	}
+}
+
+
+function split_quads(ctx, x,y)
+{
+	if(ctx.split_mode === SplitMode.LOCAL)
+	{
+		var n = ctx.selection.count;
+		switch(ctx.tool_mode)
+		{
+			case ToolMode.HORIZONTAL:
+
+				for(var i = 0; i < n; ++i)
+				{
+					var id = ctx.selection.array[i];
+					split_quad_horizontal(ctx, id, y, ctx.split_count);
+				}
+
+			break;
+			case ToolMode.VERTICAL:
+
+				for(var i = 0; i < n; ++i)
+				{
+					var id = ctx.selection.array[i];
+					split_quad_vertical(ctx, id, x);
+				}
+
+			break;
+			case SplitMode.POINT:
+
+				split_quad_vertical(ctx, ctx.selection.array[0], x);
+
+			break;
+		}
+	}
+
+	update_quad_array(ctx);
 }
 
 function split_quad_at_point(id, array, x,y)
 {
-	var quad = array[id];
+	var quad = ctx.quads[id];
+	var r = quad.rect;
 
 	// make 3 new quads, modify the first
 	var r = quad.rect;
 	var c = quad.color;
 
-	var tr = new Quad(x,y,r.max_x,r.max_y, c[0] + 0.1, c[1] + 0.1, c[2] - 0.1);
-	var bl = new Quad(r.min_x,r.min_y,x,y, c[0] + 0.1, c[1] - 0.1, c[2] + 0.1);
-	var br = new Quad(x,r.min_y,r.max_x,y, c[0] - 0.1, c[1] + 0.1, c[2] - 0.1);
-	
+	var tr = new Quad(x,y,r.max_x,r.max_y, gb.color.random_gray(0.3,0.6));
+	var bl = new Quad(r.min_x,r.min_y,x,y, gb.color.random_gray(0.3,0.6));
+	var br = new Quad(x,r.min_y,r.max_x,y, gb.color.random_gray(0.3,0.6));
 	gb.rect.set_min_max(r, r.min_x, y, x, r.max_y);
 
-	gb.array.insert_items(array, id, tr,bl,br);
-
-	update_quad_array(array);
+	ctx.new_quads.push(tr);
+	ctx.new_quads.push(bl);
+	ctx.new_quads.push(br);
 }
-function split_quad_vertical(id, array, x,y)
+
+function split_quad_vertical(ctx, id, x)
 {
-	var quad = array[id];
+	var quad = ctx.quads[id];
+	var r = quad.rect;
 
 	// make 1 new quad, modify the first
-	var r = quad.rect;
-	var c = quad.color;
-
-	var right = new Quad(x,r.min_y, r.max_x,r.max_y, c[0] + 0.1, c[1] + 0.1, c[2] - 0.1);
+	var right = new Quad(x,r.min_y, r.max_x,r.max_y, gb.color.random_gray(0.3,0.6));
 	gb.rect.set_min_max(r, r.min_x, r.min_y, x, r.max_y);
 
-	gb.array.insert_at(array, right, id+1);
-
-	update_quad_array(array);
+	ctx.new_quads.push(right);
 }
-function split_quad_horizontal(id, array, x,y)
+function split_quad_horizontal(ctx, id, y, count)
 {
-	var quad = array[id];
-
-	// make 1 new quad, modify the first
+	var quad = ctx.quads[id];
 	var r = quad.rect;
-	var c = quad.color;
 
-	var bottom = new Quad(r.min_x,r.min_y, r.max_x,y, c[0] + 0.1, c[1] + 0.1, c[2] - 0.1);
-	gb.rect.set_min_max(r, r.min_x, y, r.max_x, r.max_y);
+	if(count < 2)
+	{
+		var bottom = new Quad(r.min_x,r.min_y, r.max_x,y, gb.color.random_gray(0.3,0.6));
+		gb.rect.set_min_max(r, r.min_x, y, r.max_x, r.max_y);
+		ctx.new_quads.push(bottom);
+	}
+	else
+	{
+		//LOCAL
+		var step = r.h / (count+1);
+		var ly = step;
+		for(var i = 0; i < count; ++i)
+		{
+			var new_quad = new Quad(r.min_x,ly, r.max_x,ly+step, gb.color.random_gray(0.3,0.6));
+			ctx.new_quads.push(new_quad);
+			ly += step;
+		}
 
-	gb.array.insert_at(array, bottom, id+1);
+		//modify first
+		gb.rect.set_min_max(r, r.min_x, r.min_y, r.max_x, r.step)
+	}
 
-	update_quad_array(array);
 }
 
-function update_quad_array(array)
+function update_quad_array(ctx)
 {
-	var n = array.length;
+	//TODO remove and removed quads
+
+	// concat new rect to current ones
+
+	ctx.quads = ctx.quads.concat(ctx.new_quads);
+	ctx.new_quads = [];
+
+	var n = ctx.quads.length;
 	for(var i = 0; i < n; ++i)
-		array[i].id = i;
+		ctx.quads[i].id = i;
+
+	push_quads(square.mesh, context.quads);
 }
+
+
+// MESH RELATED STUFF
 
 function push_quad(mesh, rect, depth, color)
 {
@@ -347,7 +618,7 @@ function push_quads(mesh, rects)
 window.addEventListener('load', init, false);
 
 
-
+/*
 gb.camera.fly = function(c, dt, vertical_limit)
 {
 	if(c.fly_mode === undefined) 
@@ -425,23 +696,6 @@ gb.camera.fly = function(c, dt, vertical_limit)
 
 	gb.entity.update(c.entity);
 
-	// Draw reticule cross... (yeah, I know)
-	/*
-	var vx = gb.webgl.view.width / 2;
-	var vy = gb.webgl.view.height / 2;
-
-	var size = 5;
-	var ct = v3.tmp(vx, vy + size,0);
-	var cb = v3.tmp(vx, vy - size,0);
-	var cl = v3.tmp(vx - size, vy);
-	var cr = v3.tmp(vx + size, vy);
-	gb.projections.screen_to_world(ct, c.view_projection, ct, gb.webgl.view);
-	gb.projections.screen_to_world(cb, c.view_projection, cb, gb.webgl.view);
-	gb.projections.screen_to_world(cl, c.view_projection, cl, gb.webgl.view);
-	gb.projections.screen_to_world(cr, c.view_projection, cr, gb.webgl.view);
-	gb.gl_draw.line(ct, cb);
-	gb.gl_draw.line(cl, cr);
-	*/
-
 	gb.vec3.stack.index = index;
 }
+*/
