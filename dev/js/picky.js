@@ -19,17 +19,18 @@ var SplitMode =
 	LOCAL: 1,
 	COUNT: 2,
 };
-
+/*
 var QuadSelection = function()
 {
 	this.array = new Int32Array(128);
 	this.count = 0;
-}
+}4*/
 var Context = function()
 {
 	this.tool_mode = ToolMode.HORIZONTAL;
 	this.split_mode = SplitMode.LOCAL;
-	this.selection = new QuadSelection();
+	//this.selection = new QuadSelection();
+	this.selection = 0;
 	this.split_count = 1;
 	this.quads = [];
 	this.new_quads = [];
@@ -41,7 +42,6 @@ var Quad = function(ax,ay,bx,by, c)
 	this.depth = 0;
 	this.color = c;
 	this.id = -1;
-	this.selected = false;
 }
 
 var camera;
@@ -160,58 +160,6 @@ function update(dt)
 		split_quads(context, mx,my);
 	}
 
-	/*
-	var quad_id = find_quad_at_point(quads, mx,my);
-	if(quad_id !== -1)
-	{
-		highlight_quad(quads, quad_id);
-		gb.gl_draw.set_color(1,1,1,0.1);
-
-		var active_quad = quads[quad_id];
-		var active_rect = active_quad.rect;
-		switch(tool_mode)
-		{
-			case ToolMode.HORIZONTAL:
-
-				//check action
-				if(press)
-				{
-					split_quad_horizontal(quad_id, quads, mx,my);
-					push_quads(square.mesh, quads);
-				}
-
-			break;
-			case ToolMode.VERTICAL:
-
-				//draw split
-				draw.line_f(mx, active_rect.max_y,0, mx,active_rect.min_y,0);
-
-				//check action
-				if(press)
-				{
-					split_quad_vertical(quad_id, quads, mx,my);
-					push_quads(square.mesh, quads);
-				}
-
-			break;
-			case ToolMode.POINT:
-
-				//draw split
-				draw.line_f(mx, active_rect.max_y,0, mx,active_rect.min_y,0);
-				draw.line_f(active_rect.min_x,my,0, active_rect.max_x,my,0);
-
-				//check action
-				if(press)
-				{
-					split_quad_at_point(quad_id, quads, mx,my);
-					push_quads(square.mesh, quads);
-				}
-
-			break;
-		}
-	}
-	*/
-
 	// set split mode
 
 	if(input.down(gb.Keys.x))
@@ -271,10 +219,7 @@ function reset_quad_array(ctx)
 
 function clear_selection(ctx)
 {
-	ctx.selection.count = 0;
-	var n = ctx.quads.length;
-	for(var i = 0; i < n; ++i) 
-		ctx.quads[i].selected = false;
+	ctx.selection = 0;
 }
 
 function select_quads(ctx, x,y)
@@ -313,11 +258,9 @@ function select_quads_at_point(ctx, x,y)
 	for(var i = 0; i < n; ++i)
 	{
 		var quad = ctx.quads[i];
-		if(gb.intersect.point_rect(x,y, quad.rect) === true && quad.selected === false)
+		if(gb.intersect.point_rect(x,y, quad.rect))
 		{
-			ctx.selection.array[ctx.selection.count] = quad.id;
-			ctx.selection.count++;
-			quad.selected = true;
+			ctx.selection = quad.id;
 		}
 	}
 }
@@ -341,15 +284,7 @@ function select_quads_along_line(ctx, ax,ay, bx,by)
 function draw_selection(ctx)
 {
 	gb.gl_draw.set_color(1,0,0,0.2);
-
-	var n = ctx.selection.count;
-	for(var i = 0; i < n; ++i)
-	{
-		var id = ctx.selection.array[i];
-		var quad = ctx.quads[id];
-		var r = quad.rect;
-		gb.gl_draw.rect(r);
-	}
+	gb.gl_draw.rect(ctx.quads[ctx.selection].rect);
 }
 
 function draw_tool(ctx, x,y)
@@ -364,7 +299,7 @@ function draw_tool(ctx, x,y)
 
 			if(ctx.split_mode === SplitMode.LOCAL)
 			{
-				var quad = ctx.quads[ctx.selection.array[0]];
+				var quad = ctx.quads[ctx.selection];
 				var rect = quad.rect;
 
 				if(ctx.split_count === 1) 
@@ -402,7 +337,7 @@ function draw_tool(ctx, x,y)
 
 			if(ctx.split_mode === SplitMode.LOCAL)
 			{
-				var quad = ctx.quads[ctx.selection.array[0]];
+				var quad = ctx.quads[ctx.selection];
 				var rect = quad.rect;
 
 				if(ctx.split_count === 1) 
@@ -438,7 +373,7 @@ function draw_tool(ctx, x,y)
 		break;
 		case ToolMode.POINT:
 
-			var quad = ctx.quads[ctx.selection.array[0]];
+			var quad = ctx.quads[ctx.selection];
 			var rect = quad.rect;
 
 			draw.line_f(rect.min_x,y,0, rect.max_x,y,0);
@@ -453,15 +388,13 @@ function split_quads(ctx, x,y)
 {
 	if(ctx.split_mode === SplitMode.LOCAL)
 	{
-		var n = ctx.selection.count;
 		switch(ctx.tool_mode)
 		{
 			case ToolMode.HORIZONTAL:
 
 				for(var i = 0; i < n; ++i)
 				{
-					var id = ctx.selection.array[i];
-					split_quad_horizontal(ctx, id, y, ctx.split_count);
+					split_quad_horizontal(ctx, ctx.selection, y, ctx.split_count);
 				}
 
 			break;
@@ -469,14 +402,13 @@ function split_quads(ctx, x,y)
 
 				for(var i = 0; i < n; ++i)
 				{
-					var id = ctx.selection.array[i];
-					split_quad_vertical(ctx, id, x);
+					split_quad_vertical(ctx, ctx.selection, x);
 				}
 
 			break;
 			case SplitMode.POINT:
 
-				split_quad_vertical(ctx, ctx.selection.array[0], x);
+				split_quad_at_point(ctx, ctx.selection, x);
 
 			break;
 		}
@@ -485,7 +417,7 @@ function split_quads(ctx, x,y)
 	update_quad_array(ctx);
 }
 
-function split_quad_at_point(id, array, x,y)
+function split_quad_at_point(ctx, id, x,y)
 {
 	var quad = ctx.quads[id];
 	var r = quad.rect;
