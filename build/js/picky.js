@@ -3813,6 +3813,7 @@ function update(dt)
 	if(press)
 	{
 		split_quads(context, mx,my);
+		context.split_count = 1;
 	}
 
 	// set split mode
@@ -3822,6 +3823,8 @@ function update(dt)
 		context.split_mode++;
 		if(context.split_mode === SplitMode.COUNT)
 			context.split_mode = 0;
+		if(context.tool_mode === ToolMode.POINT)
+			context.split_mode = SplitMode.LOCAL;
 	}
 
 	// set split count
@@ -3845,7 +3848,10 @@ function update(dt)
 		if(context.tool_mode === ToolMode.COUNT)
 			context.tool_mode = 0;
 		if(context.tool_mode === ToolMode.POINT)
+		{
 			context.split_count = 1;
+			context.split_mode = SplitMode.LOCAL;
+		}
 	}
 
 	gb.debug_view.update(debug_view);
@@ -4047,23 +4053,17 @@ function split_quads(ctx, x,y)
 		{
 			case ToolMode.HORIZONTAL:
 
-				for(var i = 0; i < n; ++i)
-				{
-					split_quad_horizontal(ctx, ctx.selection, y, ctx.split_count);
-				}
+				split_quad_horizontal(ctx, ctx.selection, y, ctx.split_count);
 
 			break;
 			case ToolMode.VERTICAL:
 
-				for(var i = 0; i < n; ++i)
-				{
-					split_quad_vertical(ctx, ctx.selection, x);
-				}
+				split_quad_vertical(ctx, ctx.selection, x, ctx.split_count);
 
 			break;
-			case SplitMode.POINT:
+			case ToolMode.POINT:
 
-				split_quad_at_point(ctx, ctx.selection, x);
+				split_quad_at_point(ctx, ctx.selection, x,y);
 
 			break;
 		}
@@ -4091,16 +4091,30 @@ function split_quad_at_point(ctx, id, x,y)
 	ctx.new_quads.push(br);
 }
 
-function split_quad_vertical(ctx, id, x)
+function split_quad_vertical(ctx, id, x, count)
 {
 	var quad = ctx.quads[id];
 	var r = quad.rect;
 
-	// make 1 new quad, modify the first
-	var right = new Quad(x,r.min_y, r.max_x,r.max_y, gb.color.random_gray(0.3,0.6));
-	gb.rect.set_min_max(r, r.min_x, r.min_y, x, r.max_y);
+	if(count < 2)
+	{
+		var right = new Quad(x,r.min_y, r.max_x,r.max_y, gb.color.random_gray(0.3,0.6));
+		gb.rect.set_min_max(r, r.min_x, r.min_y, x, r.max_y);
+		ctx.new_quads.push(right);
+	}
+	else
+	{
+		var step = r.w / (count+1);
+		var lx = r.min_x + step;
+		for(var i = 0; i < count; ++i)
+		{
+			var new_quad = new Quad(lx,r.min_y, lx+step,r.max_y, gb.color.random_gray(0.3,0.6));
+			ctx.new_quads.push(new_quad);
+			lx += step;
+		}
 
-	ctx.new_quads.push(right);
+		gb.rect.set_min_max(r, r.min_x, r.min_y, r.min_x + step, r.max_y);
+	}
 }
 function split_quad_horizontal(ctx, id, y, count)
 {
@@ -4115,9 +4129,8 @@ function split_quad_horizontal(ctx, id, y, count)
 	}
 	else
 	{
-		//LOCAL
 		var step = r.h / (count+1);
-		var ly = step;
+		var ly = r.min_y + step;
 		for(var i = 0; i < count; ++i)
 		{
 			var new_quad = new Quad(r.min_x,ly, r.max_x,ly+step, gb.color.random_gray(0.3,0.6));
@@ -4125,8 +4138,7 @@ function split_quad_horizontal(ctx, id, y, count)
 			ly += step;
 		}
 
-		//modify first
-		gb.rect.set_min_max(r, r.min_x, r.min_y, r.max_x, r.step)
+		gb.rect.set_min_max(r, r.min_x, r.min_y, r.max_x, r.min_y + step);
 	}
 
 }
