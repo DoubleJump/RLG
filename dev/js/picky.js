@@ -1,8 +1,8 @@
 //TODO: global and local split
-//TODO: multisplit on mouse wheel
 //TODO: quad joining
 //TODO: floating quads
 //TODO: snapping
+//TODO mirror
 
 var v3 = gb.vec3;
 
@@ -19,22 +19,18 @@ var SplitMode =
 	LOCAL: 1,
 	COUNT: 2,
 };
-/*
-var QuadSelection = function()
-{
-	this.array = new Int32Array(128);
-	this.count = 0;
-}4*/
+
 var Context = function()
 {
 	this.tool_mode = ToolMode.HORIZONTAL;
 	this.split_mode = SplitMode.LOCAL;
-	//this.selection = new QuadSelection();
 	this.selection = 0;
 	this.split_count = 1;
 	this.quads = [];
 	this.new_quads = [];
 	this.removed_quads = [];
+	this.width;
+	this.height;
 }
 var Quad = function(ax,ay,bx,by, c)
 {
@@ -69,7 +65,6 @@ function init()
 		root: gb.dom.get('.canvas'),
 	});
 
-	//gb.canvas.init(gb.dom.get('.canvas'));
 	gb.webgl.init(
 	{
 		container: gb.dom.get('.canvas'),
@@ -102,9 +97,9 @@ function init()
 	var vb = gb.vertex_buffer.new();
 	gb.vertex_buffer.add_attribute(vb, 'position', 3, false);
 	gb.vertex_buffer.add_attribute(vb, 'color', 4, true);
-	gb.vertex_buffer.alloc(vb, 1024);
+	gb.vertex_buffer.alloc(vb, 8192);
 
-	var ib = gb.index_buffer.new((1024 / 4) * 3);
+	var ib = gb.index_buffer.new((8192 / 4) * 6);
 
     var mesh = gb.mesh.new(vb, ib, 'TRIANGLES', 'DYNAMIC_DRAW');
     mesh.vertex_offset = 0;
@@ -116,10 +111,9 @@ function init()
 
     // CREATE CONTEXT
 
+    context.width = gb.webgl.view[0];
+    context.height = gb.webgl.view[1];
     reset_quad_array(context);
-
-    //context.quads.push(new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], gb.color.new(0.3,0.3,0.3,1.0)));
-    //update_quad_array(context);
 
 	//DEBUG
 	gb.debug_view.watch(debug_view, 'Pos', camera.entity, 'position');
@@ -150,9 +144,13 @@ function update(dt)
 		reset_quad_array(context);
 	}
 
-	clear_selection(context);
-	select_quads(context, mx,my);
-	draw_selection(context);
+	context.selection = 0;
+	if(context.split_mode === SplitMode.LOCAL)
+	{
+		select_quads_at_point(context, mx,my);
+		draw_selection(context);
+	}
+	
 	draw_tool(context, mx,my);
 
 	if(press)
@@ -168,8 +166,6 @@ function update(dt)
 		context.split_mode++;
 		if(context.split_mode === SplitMode.COUNT)
 			context.split_mode = 0;
-		if(context.tool_mode === ToolMode.POINT)
-			context.split_mode = SplitMode.LOCAL;
 	}
 
 	// set split count
@@ -184,6 +180,8 @@ function update(dt)
 		context.split_count--;
 		if(context.split_count < 1) context.split_count = 1;
 	}
+	if(context.tool_mode === ToolMode.POINT)
+		context.split_count === 1;
 
 	// cycle tools
 
@@ -195,7 +193,6 @@ function update(dt)
 		if(context.tool_mode === ToolMode.POINT)
 		{
 			context.split_count = 1;
-			context.split_mode = SplitMode.LOCAL;
 		}
 	}
 
@@ -215,7 +212,7 @@ function render()
 function reset_quad_array(ctx)
 {
 	ctx.quads = [];
-	var q = new Quad(0, 0, gb.webgl.view[0], gb.webgl.view[1], gb.color.new(0.3,0.3,0.3,1.0));
+	var q = new Quad(0, 0, ctx.width, ctx.height, gb.color.new(0.3,0.3,0.3,1.0));
 	context.quads.push(q);
     update_quad_array(context);
 }
@@ -223,40 +220,6 @@ function reset_quad_array(ctx)
 
 // SELECTION
 
-function clear_selection(ctx)
-{
-	ctx.selection = 0;
-}
-
-function select_quads(ctx, x,y)
-{
-	// find a selection for the current tool and split mode
-
-	if(ctx.split_mode === SplitMode.LOCAL)
-	{
-		select_quads_at_point(ctx, x,y);
-	}
-	else
-	{
-		/*
-		switch(ctx.tool_mode)
-		{
-			case ToolMode.HORIZONTAL:
-
-
-			break;
-			case ToolMode.VERTICAL:
-
-
-			break;
-			case ToolMode.POINT:
-
-
-			break;
-		}
-		*/
-	}
-}
 function select_quads_at_point(ctx, x,y)
 {
 	// TODO: take into account z-index
@@ -270,33 +233,16 @@ function select_quads_at_point(ctx, x,y)
 		}
 	}
 }
-/*
-function select_quads_along_line(ctx, ax,ay, bx,by)
-{
-	var n = ctx.quads.length;
-	for(var i = 0; i < n; ++i)
-	{
-		var quad = ctx.quads[i];
-		if(gb.intersect.line_rect(ax,ay,bx,by, quad.rect) && quad.selected === false)
-		{
-			ctx.selection.array[ctx.selection_count] = quad.id;
-			ctx.selection.count++;
-			quad.selected = true;
-		}
-	}
-}
-*/
 
 function draw_selection(ctx)
 {
-	gb.gl_draw.set_color(1,0,0,0.2);
+	gb.gl_draw.set_color(1,1,1,0.2);
 	gb.gl_draw.rect(ctx.quads[ctx.selection].rect);
 }
 
 function draw_tool(ctx, x,y)
 {
 	var draw = gb.gl_draw;
-	var view = gb.webgl.view;
 	draw.set_color(1,1,1,0.2);
 
 	switch(ctx.tool_mode)
@@ -325,14 +271,14 @@ function draw_tool(ctx, x,y)
 			}
 			else
 			{
-				if(ctx.split_count === 1) draw.line_f(0,y,0, view[0],y,0);
+				if(ctx.split_count === 1) draw.line_f(0,y,0, ctx.width,y,0);
 				else
 				{
-					var step = view[1] / (ctx.split_count+1);
+					var step = ctx.height / (ctx.split_count+1);
 					var ly = step;
 					for(var i = 0; i < ctx.split_count; ++i)
 					{
-						draw.line_f(0,ly,0, view[0],ly,0);
+						draw.line_f(0,ly,0, ctx.width,ly,0);
 						ly += step;
 					}
 				}
@@ -363,14 +309,14 @@ function draw_tool(ctx, x,y)
 			}
 			else
 			{
-				if(ctx.split_count === 1) draw.line_f(x,0,0, x,view[1],0);
+				if(ctx.split_count === 1) draw.line_f(x,0,0, x,ctx.height,0);
 				else
 				{
-					var step = view[0] / (ctx.split_count+1);
+					var step = ctx.width / (ctx.split_count+1);
 					var lx = step;
 					for(var i = 0; i < ctx.split_count; ++i)
 					{
-						draw.line_f(lx,0,0, lx,view[1],0);
+						draw.line_f(lx,0,0, lx,ctx.height,0);
 						lx += step;
 					}
 				}
@@ -379,11 +325,19 @@ function draw_tool(ctx, x,y)
 		break;
 		case ToolMode.POINT:
 
-			var quad = ctx.quads[ctx.selection];
-			var rect = quad.rect;
+			if(ctx.split_mode === SplitMode.LOCAL)
+			{
+				var quad = ctx.quads[ctx.selection];
+				var rect = quad.rect;
 
-			draw.line_f(rect.min_x,y,0, rect.max_x,y,0);
-			draw.line_f(x,rect.min_y,0, x,rect.max_y,0);
+				draw.line_f(rect.min_x,y,0, rect.max_x,y,0);
+				draw.line_f(x,rect.min_y,0, x,rect.max_y,0);
+			}
+			else
+			{
+				draw.line_f(0,y,0, ctx.width,y,0);
+				draw.line_f(x,0,0, x,ctx.height,0);
+			}
 
 		break;
 	}
@@ -412,15 +366,45 @@ function split_quads(ctx, x,y)
 
 			break;
 		}
+		update_quad_array(ctx);
 	}
+	else
+	{
+		switch(ctx.tool_mode)
+		{
+			case ToolMode.HORIZONTAL:
 
-	update_quad_array(ctx);
+				split_all_horizontal(ctx, y, ctx.split_count);
+				update_quad_array(ctx);
+
+			break;
+			case ToolMode.VERTICAL:
+
+				split_all_vertical(ctx, x, ctx.split_count);
+
+			break;
+			case ToolMode.POINT:
+
+				split_all_horizontal(ctx, y, 1);
+				update_quad_array(ctx);
+
+				split_all_vertical(ctx, x, 1);
+				update_quad_array(ctx);
+
+			break;
+		}
+	}
 }
 
 function split_quad_at_point(ctx, id, x,y)
 {
 	var quad = ctx.quads[id];
 	var r = quad.rect;
+
+	if(r.max_x - x < 4) return;
+	if(r.max_y - y < 4) return;
+	if(x - r.min_x < 4) return;
+	if(y - r.min_y < 4) return;
 
 	// make 3 new quads, modify the first
 	var r = quad.rect;
@@ -440,6 +424,9 @@ function split_quad_vertical(ctx, id, x, count)
 {
 	var quad = ctx.quads[id];
 	var r = quad.rect;
+
+	if(r.max_x - x < 4) return;
+	if(x - r.min_x < 4) return;
 
 	if(count < 2)
 	{
@@ -466,6 +453,9 @@ function split_quad_horizontal(ctx, id, y, count)
 	var quad = ctx.quads[id];
 	var r = quad.rect;
 
+	if(r.max_y - y < 4) return;
+	if(y - r.min_y < 4) return;
+
 	if(count < 2)
 	{
 		var bottom = new Quad(r.min_x,r.min_y, r.max_x,y, gb.color.random_gray(0.3,0.6));
@@ -485,7 +475,78 @@ function split_quad_horizontal(ctx, id, y, count)
 
 		gb.rect.set_min_max(r, r.min_x, r.min_y, r.max_x, r.min_y + step);
 	}
+}
 
+function split_all_horizontal(ctx, y, count)
+{
+	if(count < 2)
+	{
+		var n = ctx.quads.length;
+		for(var i = 0; i < n; ++i)
+		{
+			var q = ctx.quads[i];
+			if(gb.intersect.line_rect(0,y,ctx.width,y, q.rect) === true)
+			{
+				split_quad_horizontal(ctx, q.id, y, 1);
+			}
+		}
+	}
+	else
+	{
+		var step = ctx.height / (count+1)
+		var ly = step;
+		for(var c = 0; c < count; ++c)
+		{
+			var n = ctx.quads.length;
+			for(var i = 0; i < n; ++i)
+			{
+				var q = ctx.quads[i];
+				if(gb.intersect.line_rect(0,ly,ctx.width,ly, q.rect) === true)
+				{
+					split_quad_horizontal(ctx, q.id, ly, 1);
+				}
+			}
+			ly += step;
+			update_quad_array(ctx);
+		}
+	}
+
+}
+function split_all_vertical(ctx, x, count)
+{
+
+	if(count < 2)
+	{
+		var n = ctx.quads.length;
+		for(var i = 0; i < n; ++i)
+		{
+			var q = ctx.quads[i];
+			if(gb.intersect.line_rect(x,0,x,ctx.height, q.rect) === true)
+			{
+				split_quad_vertical(ctx, q.id, x, 1);
+			}
+		}
+		update_quad_array(ctx);
+	}
+	else
+	{
+		var step = ctx.width / (count+1)
+		var lx = step;
+		for(var c = 0; c < count; ++c)
+		{
+			var n = ctx.quads.length;
+			for(var i = 0; i < n; ++i)
+			{
+				var q = ctx.quads[i];
+				if(gb.intersect.line_rect(lx,0,lx,ctx.height, q.rect) === true)
+				{
+					split_quad_vertical(ctx, q.id, lx, 1);
+				}
+			}
+			lx += step;
+			update_quad_array(ctx);
+		}
+	}
 }
 
 function update_quad_array(ctx)
@@ -493,7 +554,6 @@ function update_quad_array(ctx)
 	//TODO remove and removed quads
 
 	// concat new rect to current ones
-
 	ctx.quads = ctx.quads.concat(ctx.new_quads);
 	ctx.new_quads = [];
 
