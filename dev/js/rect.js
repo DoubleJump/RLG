@@ -36,12 +36,12 @@ gb.rect =
 	},
 	set_min_max: function(r, ax,ay, bx,by)
 	{
-		r.x = (bx - ax) / 2;
-		r.y = (by - ay) / 2;
 		r.w = bx-ax;
 		r.h = by-ay;
 		r.hw = r.w / 2;
 		r.hh = r.h / 2;
+		r.x = ax + r.hw;
+		r.y = ay + r.hh;
 		r.min_x = ax;
 		r.min_y = ay;
 		r.max_x = bx;
